@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, render_template, session, redirect, u
 from groq import Groq
 import json
 import os
+import base64
+import fitz
 from datetime import datetime
 
 app = Flask(__name__, static_folder='static')
@@ -16,17 +18,17 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 # Set up Groq client
 client = Groq(api_key=GROQ_API_KEY)
 
-# Knowledge file stored inside app
+# Knowledge file
 KNOWLEDGE_FILE = "my_knowledge.txt"
 
-# ─── Load knowledge from file ───
+# ─── Load knowledge ───
 def load_knowledge():
     if os.path.exists(KNOWLEDGE_FILE):
         with open(KNOWLEDGE_FILE, "r") as f:
             return f.read()
     return "No knowledge loaded yet."
 
-# ─── Save new knowledge to file ───
+# ─── Save knowledge ───
 def save_knowledge(new_info):
     existing = load_knowledge()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -51,8 +53,9 @@ Important rules:
 - Never say you are an AI unless directly asked
 
 Memory rules:
-- If the user says "remember", "save", "learn" or "add to knowledge"
-  extract the key information and reply with exactly:
+- If the user says "remember", "save", "learn"
+  or "add to knowledge" extract the key information
+  and reply with exactly:
   SAVE_KNOWLEDGE: [the information to save]
 - Otherwise just chat normally
 """
@@ -100,16 +103,74 @@ def chat():
 
     data = request.json
     user_message = data.get("message", "")
+    image_data = data.get("image", None)
+    pdf_text = data.get("pdf_text", None)
 
-    if not user_message:
-        return jsonify({"error": "No message provided"}), 400
-
-    chat_history.append({
-        "role": "user",
-        "content": user_message
-    })
+    if not user_message and not image_data and not pdf_text:
+        return jsonify({"error": "No input provided"}), 400
 
     try:
+        # ─── Handle image ───
+        if image_data:
+            image_bytes = base64.b64decode(image_data["data"])
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
+
+            response = client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{image_data['type']};base64,{base64_image}"
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": user_message if user_message else "What is in this image? Describe it in detail."
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=1000
+            )
+
+            ai_reply = response.choices[0].message.content
+            chat_history.append({"role": "user", "content": f"[Sent an image] {user_message}"})
+            chat_history.append({"role": "assistant", "content": ai_reply})
+            return jsonify({"reply": ai_reply})
+
+        # ─── Handle PDF ───
+        if pdf_text:
+            full_message = f"""
+The user has shared a PDF document. Here is the content:
+
+{pdf_text[:4000]}
+
+User question: {user_message if user_message else 'Please summarise this document.'}
+"""
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": build_system_instruction()},
+                    {"role": "user", "content": full_message}
+                ],
+                max_tokens=1000
+            )
+
+            ai_reply = response.choices[0].message.content
+            chat_history.append({"role": "user", "content": f"[Sent a PDF] {user_message}"})
+            chat_history.append({"role": "assistant", "content": ai_reply})
+            return jsonify({"reply": ai_reply})
+
+        # ─── Handle normal text chat ───
+        chat_history.append({
+            "role": "user",
+            "content": user_message
+        })
+
         recent_history = chat_history[-20:]
 
         response = client.chat.completions.create(
