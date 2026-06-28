@@ -3,7 +3,7 @@ from groq import Groq
 import json
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
 # Secret key for session security
 app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret-key")
