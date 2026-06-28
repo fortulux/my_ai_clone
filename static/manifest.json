@@ -1,0 +1,22 @@
+{
+    "name": "My AI Clone",
+    "short_name": "AI Clone",
+    "description": "My personal AI clone — second brain",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1a1a2e",
+    "theme_color": "#0f3460",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/static/icon.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/static/icon.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
