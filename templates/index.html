@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My AI Clone</title>
-<link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#0f3460">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="AI Clone">
-<link rel="apple-touch-icon" href="/static/icon.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0f3460">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AI Clone">
+    <link rel="apple-touch-icon" href="/static/icon.png">
     <style>
         * {
             margin: 0;
@@ -136,12 +136,69 @@
             color: #e94560;
         }
 
+        .file-preview {
+            background: #0f3460;
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            font-size: 0.85rem;
+        }
+
+        .file-preview span {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-preview button {
+            background: none;
+            border: none;
+            color: #e94560;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0;
+        }
+
+        .image-preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 12px;
+            object-fit: cover;
+            margin-bottom: 8px;
+        }
+
         .chat-input-area {
             padding: 12px;
             background: #0f3460;
             display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .input-row {
+            display: flex;
             gap: 8px;
             align-items: flex-end;
+        }
+
+        .attach-btn {
+            width: 45px;
+            height: 45px;
+            background: #16213e;
+            color: #aaa;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             flex-shrink: 0;
         }
 
@@ -185,7 +242,10 @@
             background: #c73652;
         }
 
-        /* Mobile specific */
+        #fileInput {
+            display: none;
+        }
+
         @media (max-width: 600px) {
             .message {
                 max-width: 90%;
@@ -214,39 +274,104 @@
         <div class="chat-messages" id="chatMessages">
             <div class="welcome-message">
                 <h2>Hello! I am your AI Clone 👋</h2>
-                <p>Ask me anything — I think and talk just like you!</p>
+                <p>Chat, send images 🖼️ or upload PDFs 📄</p>
             </div>
         </div>
 
         <div class="chat-input-area">
-            <textarea 
-                id="userInput" 
-                placeholder="Type a message..." 
-                rows="1"
-                oninput="autoResize(this)"
-                onkeypress="handleKeyPress(event)"
-            ></textarea>
-            <button class="send-btn" onclick="sendMessage()">➤</button>
+            <div id="filePreviewArea"></div>
+            <div class="input-row">
+                <button class="attach-btn" onclick="document.getElementById('fileInput').click()">📎</button>
+                <input type="file" id="fileInput" accept="image/*,.pdf" onchange="handleFileSelect(event)">
+                <textarea
+                    id="userInput"
+                    placeholder="Type a message or attach a file..."
+                    rows="1"
+                    oninput="autoResize(this)"
+                    onkeypress="handleKeyPress(event)"
+                ></textarea>
+                <button class="send-btn" onclick="sendMessage()">➤</button>
+            </div>
         </div>
     </div>
 
     <script>
         const chatMessages = document.getElementById('chatMessages');
         const userInput = document.getElementById('userInput');
+        const filePreviewArea = document.getElementById('filePreviewArea');
+
+        let selectedFile = null;
+        let selectedFileType = null;
 
         function autoResize(el) {
             el.style.height = 'auto';
             el.style.height = Math.min(el.scrollHeight, 120) + 'px';
         }
 
-        function addMessage(content, isUser) {
+        // ─── Handle file selection ───
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFile = file;
+            filePreviewArea.innerHTML = '';
+
+            // Image preview
+            if (file.type.startsWith('image/')) {
+                selectedFileType = 'image';
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                img.className = 'image-preview';
+                filePreviewArea.appendChild(img);
+
+                const removeBtn = document.createElement('div');
+                removeBtn.className = 'file-preview';
+                removeBtn.innerHTML = `<span>🖼️ ${file.name}</span><button onclick="clearFile()">✕</button>`;
+                filePreviewArea.appendChild(removeBtn);
+            }
+
+            // PDF preview
+            else if (file.type === 'application/pdf') {
+                selectedFileType = 'pdf';
+                const preview = document.createElement('div');
+                preview.className = 'file-preview';
+                preview.innerHTML = `<span>📄 ${file.name}</span><button onclick="clearFile()">✕</button>`;
+                filePreviewArea.appendChild(preview);
+            }
+
+            else {
+                alert('Please select an image or PDF file only!');
+                clearFile();
+            }
+
+            // Reset file input
+            event.target.value = '';
+        }
+
+        function clearFile() {
+            selectedFile = null;
+            selectedFileType = null;
+            filePreviewArea.innerHTML = '';
+        }
+
+        function addMessage(content, isUser, isImage = false) {
             const welcome = document.querySelector('.welcome-message');
             if (welcome) welcome.remove();
 
             const div = document.createElement('div');
             div.classList.add('message');
             div.classList.add(isUser ? 'user-message' : 'ai-message');
-            div.textContent = content;
+
+            if (isImage) {
+                const img = document.createElement('img');
+                img.src = content;
+                img.style.maxWidth = '100%';
+                img.style.borderRadius = '8px';
+                div.appendChild(img);
+            } else {
+                div.textContent = content;
+            }
+
             chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -265,11 +390,70 @@
             if (typing) typing.remove();
         }
 
+        // ─── Read file as base64 ───
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // ─── Read PDF as text using FileReader ───
+        async function extractPDFText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const typedArray = new Uint8Array(e.target.result);
+                        const text = new TextDecoder('utf-8').decode(typedArray);
+                        const cleaned = text.replace(/[^\x20-\x7E\n]/g, ' ').trim();
+                        resolve(cleaned.substring(0, 4000));
+                    } catch (err) {
+                        resolve("Could not extract PDF text.");
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // ─── Send message ───
         async function sendMessage() {
             const message = userInput.value.trim();
-            if (!message) return;
+            if (!message && !selectedFile) return;
 
-            addMessage(message, true);
+            let requestData = { message: message };
+
+            // Handle image
+            if (selectedFile && selectedFileType === 'image') {
+                addMessage(URL.createObjectURL(selectedFile), true, true);
+                if (message) addMessage(message, true);
+
+                const base64 = await readFileAsBase64(selectedFile);
+                requestData.image = {
+                    data: base64,
+                    type: selectedFile.type
+                };
+                clearFile();
+            }
+
+            // Handle PDF
+            else if (selectedFile && selectedFileType === 'pdf') {
+                addMessage(`📄 Sent PDF: ${selectedFile.name}`, true);
+                if (message) addMessage(message, true);
+
+                const pdfText = await extractPDFText(selectedFile);
+                requestData.pdf_text = pdfText;
+                clearFile();
+            }
+
+            // Normal text
+            else {
+                addMessage(message, true);
+            }
+
             userInput.value = '';
             userInput.style.height = 'auto';
             showTyping();
@@ -278,7 +462,7 @@
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message })
+                    body: JSON.stringify(requestData)
                 });
 
                 if (response.status === 401) {
