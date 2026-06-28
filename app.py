@@ -2,36 +2,59 @@ from flask import Flask, request, jsonify, render_template, session, redirect, u
 from groq import Groq
 import json
 import os
+from datetime import datetime
 
 app = Flask(__name__, static_folder='static')
 
 # Secret key for session security
 app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret-key")
 
-# Your credentials from environment variables
+# Your credentials
 SECRET_PASSWORD = os.environ.get("SECRET_PASSWORD", "changeme")
-
-# Your Groq API key
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+# Set up Groq client
 client = Groq(api_key=GROQ_API_KEY)
 
-# Your personal knowledge
-MY_KNOWLEDGE = """
-paste your my_knowledge.txt content here
-"""
+# Knowledge file stored inside app
+KNOWLEDGE_FILE = "my_knowledge.txt"
 
-# Your system instruction
-SYSTEM_INSTRUCTION = f"""
+# ─── Load knowledge from file ───
+def load_knowledge():
+    if os.path.exists(KNOWLEDGE_FILE):
+        with open(KNOWLEDGE_FILE, "r") as f:
+            return f.read()
+    return "No knowledge loaded yet."
+
+# ─── Save new knowledge to file ───
+def save_knowledge(new_info):
+    existing = load_knowledge()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    updated = existing + f"\n\n[Learned on {timestamp}]\n{new_info}"
+    with open(KNOWLEDGE_FILE, "w") as f:
+        f.write(updated)
+    return updated
+
+# ─── Build system instruction ───
+def build_system_instruction():
+    knowledge = load_knowledge()
+    return f"""
 You are an AI clone of [your name].
 
 Here is everything you know about yourself:
-{MY_KNOWLEDGE}
+{knowledge}
 
 Important rules:
 - Always answer as if you ARE this person
 - Use their personality tone and language style
 - Draw from their knowledge and experience
 - Never say you are an AI unless directly asked
+
+Memory rules:
+- If the user says "remember", "save", "learn" or "add to knowledge"
+  extract the key information and reply with exactly:
+  SAVE_KNOWLEDGE: [the information to save]
+- Otherwise just chat normally
 """
 
 # Store chat history
@@ -92,12 +115,18 @@ def chat():
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": SYSTEM_INSTRUCTION}
+                {"role": "system", "content": build_system_instruction()}
             ] + recent_history,
             max_tokens=1000
         )
 
         ai_reply = response.choices[0].message.content
+
+        # ─── Check if AI wants to save knowledge ───
+        if ai_reply.startswith("SAVE_KNOWLEDGE:"):
+            new_info = ai_reply.replace("SAVE_KNOWLEDGE:", "").strip()
+            save_knowledge(new_info)
+            ai_reply = f"✅ Got it! I have saved this to my knowledge:\n\n'{new_info}'\n\nI will remember this forever!"
 
         chat_history.append({
             "role": "assistant",
